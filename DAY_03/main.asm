@@ -30,7 +30,6 @@ main:
     ; Initialize variables
     xor rax, rax
     mov [BPB], rax
-    mov [sum], rax
     
     ; Open the input file
     mov rdi, filename
@@ -52,23 +51,56 @@ main:
     call malloc
     mov [lineInput], rax
     
+; Do part 1
+    ; Seek back to zero
     mov rdi, [fd]
     mov rsi, 0
     mov rdx, 0
     call fseek
     
-.pLoop:
+    ; Reset sum variable
+    xor rax, rax
+    mov [sum], rax
+    
+.pLoop1:
+    call ReadBank
+    push rax
+    ;call PrintLine
+    call ProcessBank2   ; Should be using ProcessBankD here, but just to show
+                        ; My solution I had originally I will leave this here
+    add [sum], rax
+    pop rax
+    cmp rax, 0
+    jne .pLoop1
+    
+    mov rdi, sumFormat1
+    mov rsi, [sum]
+    call printf
+    
+; Do part 2
+    ; Seek back to zero
+    mov rdi, [fd]
+    mov rsi, 0
+    mov rdx, 0
+    call fseek
+    
+    ; Reset sum variable
+    xor rax, rax
+    mov [sum], rax
+    
+.pLoop2:
     call ReadBank
     push rax
     call PrintLine
-    call ProcessBank2
+    mov rdi, 12
+    call ProcessBankD
     
     add [sum], rax
     pop rax
     cmp rax, 0
-    jne .pLoop
+    jne .pLoop2
     
-    mov rdi, sumFormat
+    mov rdi, sumFormat2
     mov rsi, [sum]
     call printf
     
@@ -81,23 +113,43 @@ main:
     
     jmp exit
     
-PrintLine:
-    mov rbx, [lineInput]
-    mov rsi, 0
+    ; An improved version of ProcessBank2 that can work with any amount of
+    ; batteries
+    ; Note: I should thought of this one first...
+    ; rdi - Amount of batteries to turn on
+ProcessBankD:
+    mov rax, 0  ; Collects the digits
+    mov rbx, [lineInput]    ; Pointer to array
+    mov rsi, 0              ; Starting index
+.numloop:
+    mov dl, 0       ; Current best value
+    mov rcx, [BPB]  ; How many times to count
+    sub rcx, rsi    ; Count from rsi to the end, not past it
+    sub rcx, rdi    ; Count up to index N-rdi+1, this leaves room for other
+    add rcx, 1      ; digits at the end in case a large digit is near the end
 .loop:
-    mov rdi, [rbx+rsi]
-    push rbx
-    push rsi
-    call putchar
-    pop rsi
-    pop rbx
+    mov dh, [rbx+rsi]
     inc rsi
-    cmp rsi, [BPB]
-    jne .loop
-.end:
-    mov rdi, 10
-    call putchar
-    ret
+    cmp dh, dl
+    jbe .smaller
+    mov dl, dh
+    mov r8, rsi     ; Index of the digit right after the best one
+                    ; Used for next itteration as start index
+.smaller:
+    loop .loop
+    
+    sub dl, 0x30    ; Get value from ascii digit
+    movzx rcx, dl
+    mov rdx, 10
+    mul rdx          ; Multiply rax by 10
+    add rax, rcx     ; Collect the digit
+    
+    mov rsi, r8     ; Get the starting index which is right after the best digit this iteration
+    dec rdi
+    jnz .numloop
+    
+    ret             ; rax contains the jolt of this bank
+    
     
     ; Process a bank and get it's maximum jolt with turning on 2 batteries
 ProcessBank2:
@@ -138,6 +190,24 @@ ProcessBank2:
     mul bl
     add al, dl
     movzx rax, al
+    ret
+    
+PrintLine:
+    mov rbx, [lineInput]
+    mov rsi, 0
+.loop:
+    mov rdi, [rbx+rsi]
+    push rbx
+    push rsi
+    call putchar
+    pop rsi
+    pop rbx
+    inc rsi
+    cmp rsi, [BPB]
+    jne .loop
+.end:
+    mov rdi, 10
+    call putchar
     ret
     
     ; Read in a bank
@@ -219,8 +289,10 @@ fileNotFoundMsg:
 .end:
 
 dbgFormat:
-    db "BPB: %d", 10, 0
-sumFormat:
-    db "Sum: %d", 10, 0
+    db "BPB: %lld", 10, 0
+sumFormat1:
+    db "Part 1 Sum: %lld", 10, 0
+sumFormat2:
+    db "Part 2 Sum: %lld", 10, 0
 dFormat:
-    db "%d", 10, 0
+    db "%lld", 10, 0
